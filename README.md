@@ -2,7 +2,12 @@
 
 Standalone Foundry Nuke Draw Align tool.
 
-Add this directory to Nuke's plug-in path. The command is registered at
+Add this directory to Nuke's plug-in path.
+```
+nuke.pluginAddPath("/path/to/NukeOCD")
+```
+
+ The command is registered at
 **Edit/Node → OCD → Draw Align Nodes** with shortcut **Shift+L**.
 
 - Draw mostly horizontally to align node centers on Y.
@@ -10,5 +15,11 @@ Add this directory to Nuke's plug-in path. The command is registered at
 - Repeat gestures while the mode is active.
 - Press Escape or invoke the shortcut again to exit.
 
-This README is maintained in `publishing/draw_align_README.md` in the source
-project and copied verbatim into the public bundle during each build.
+#### Coder for Hire
+
+If you need scripts for Nuke/VFX I would love to help (
+
+## Coffee
+<a href="https://www.paypal.com/paypalme/MBORGO">Love it? Buy me a coffee</a>
+
+
