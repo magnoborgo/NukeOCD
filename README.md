@@ -2,9 +2,9 @@
 
 Standalone Foundry Nuke Draw Align tool.
 
-Add this directory to Nuke's plug-in path.
+Add this directory to Nuke's plug-in path on the init.py
 ```
-nuke.pluginAddPath("/path/to/NukeOCD")
+nuke.pluginAddPath("/path/to/NukeOCD") 
 ```
 
  The command is registered at
@@ -17,7 +17,7 @@ nuke.pluginAddPath("/path/to/NukeOCD")
 
 #### Coder for Hire
 
-If you need scripts for Nuke/VFX I would love to help (
+If you need scripts for Nuke/VFX I'm here to help
 
 ## Coffee
 <a href="https://www.paypal.com/paypalme/MBORGO">Love it? Buy me a coffee</a>
