@@ -167,6 +167,52 @@ def offset_around_external_obstacles(nodes, coordinates, all_nodes, axis, gap=20
     return tuple((x, int(round(y + translation))) for x, y in coordinates)
 
 
+def colliding_external_obstacles(nodes, coordinates, all_nodes, gap=20):
+    """Return fixed nodes intersecting the proposed aligned layout and margin."""
+
+    nodes = tuple(nodes)
+    coordinates = tuple(coordinates)
+    aligned_keys = {_node_key(node) for node in nodes}
+    obstacles = [
+        node for node in all_nodes if _node_key(node) not in aligned_keys
+    ]
+    regular_nodes = [node for node in nodes if not _is_dot(node)]
+    regular_width = int(round(median(
+        [int(node.screenWidth()) for node in regular_nodes] or [80]
+    )))
+    regular_height = int(round(median(
+        [int(node.screenHeight()) for node in regular_nodes] or [20]
+    )))
+    collided = []
+    collided_keys = set()
+    for node, (x, y) in zip(nodes, coordinates):
+        if _is_dot(node):
+            width, height = regular_width, regular_height
+            left = x + node.screenWidth() / 2.0 - width / 2.0
+            top = y + node.screenHeight() / 2.0 - height / 2.0
+        else:
+            width, height = node.screenWidth(), node.screenHeight()
+            left, top = float(x), float(y)
+        right, bottom = left + width, top + height
+        for obstacle in obstacles:
+            key = _node_key(obstacle)
+            if key in collided_keys:
+                continue
+            obstacle_left = float(obstacle.xpos())
+            obstacle_top = float(obstacle.ypos())
+            obstacle_right = obstacle_left + float(obstacle.screenWidth())
+            obstacle_bottom = obstacle_top + float(obstacle.screenHeight())
+            if (
+                right > obstacle_left - gap
+                and left < obstacle_right + gap
+                and bottom > obstacle_top - gap
+                and top < obstacle_bottom + gap
+            ):
+                collided_keys.add(key)
+                collided.append(obstacle)
+    return tuple(collided)
+
+
 def _nearest_allowed_translation(intervals):
     merged = []
     for start, end in sorted(intervals):
@@ -471,6 +517,7 @@ def draw_align_nodes():
             self.axis = None
             self.cursor_refresh_pending = False
             self.invalid_cursor_active = False
+            self._collision_markers = []
             self.active = True
 
         def _ocd_cursor(self, background):
@@ -599,6 +646,9 @@ def draw_align_nodes():
             coordinates = resolve_alignment_overlaps(
                 aligned_nodes, coordinates, self.axis
             )
+            collided_obstacles = colliding_external_obstacles(
+                aligned_nodes, coordinates, candidates
+            )
             coordinates = offset_around_external_obstacles(
                 aligned_nodes, coordinates, candidates, self.axis
             )
@@ -612,7 +662,80 @@ def draw_align_nodes():
                 raise
             else:
                 nuke.Undo.end()
+                self._show_collision_markers(collided_obstacles)
                 self._reset_gesture()
+
+        def _show_collision_markers(self, obstacles):
+            """Flash a small comic starburst at each blocking node's center."""
+
+            class CollisionMarker(QtWidgets.QWidget):
+                def paintEvent(self, event):
+                    import math
+
+                    painter = QtGui.QPainter(self)
+                    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+                    points = []
+                    for index in range(24):
+                        angle = -math.pi / 2.0 + index * math.pi / 12.0
+                        radius = 15.0 if index % 2 == 0 else 9.0
+                        points.append(QtCore.QPointF(
+                            17.0 + math.cos(angle) * radius,
+                            17.0 + math.sin(angle) * radius,
+                        ))
+                    painter.setPen(QtGui.QPen(QtGui.QColor(190, 55, 20), 2))
+                    painter.setBrush(QtGui.QColor(255, 210, 45, 250))
+                    painter.drawPolygon(QtGui.QPolygonF(points))
+                    painter.setPen(QtGui.QColor(70, 25, 10))
+                    font = painter.font()
+                    font.setBold(True)
+                    font.setPixelSize(15)
+                    painter.setFont(font)
+                    painter.drawText(self.rect(), QtCore.Qt.AlignCenter, "!")
+
+            for obstacle in obstacles:
+                try:
+                    zoom = float(nuke.zoom())
+                    center = nuke.center()
+                    graph_x = obstacle.xpos() + obstacle.screenWidth() / 2.0
+                    # In Nuke's live DAG projection the marker's top-level Qt
+                    # window lands half a node-height above the graph-space Y
+                    # requested here. Include that offset so the visible icon,
+                    # rather than its window anchor, is centered on the node.
+                    graph_y = obstacle.ypos() + obstacle.screenHeight()
+                    local_x = self.width() / 2.0 + (graph_x - center[0]) * zoom
+                    local_y = self.height() / 2.0 + (graph_y - center[1]) * zoom
+                    global_point = self.mapToGlobal(
+                        QtCore.QPoint(int(round(local_x)), int(round(local_y)))
+                    )
+                except RuntimeError:
+                    continue
+
+                marker = CollisionMarker(parent=None)
+                marker.setWindowFlags(
+                    QtCore.Qt.Tool
+                    | QtCore.Qt.FramelessWindowHint
+                    | QtCore.Qt.WindowStaysOnTopHint
+                )
+                marker.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+                marker.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+                marker.setFixedSize(34, 34)
+                marker.move(global_point.x() - 17, global_point.y() - 17)
+
+                marker.show()
+                marker.raise_()
+                self._collision_markers.append(marker)
+
+                def remove_marker(widget=marker):
+                    try:
+                        widget.close()
+                    except RuntimeError:
+                        pass
+                    try:
+                        self._collision_markers.remove(widget)
+                    except (ValueError, RuntimeError):
+                        pass
+
+                QtCore.QTimer.singleShot(1000, remove_marker)
 
         def _reset_gesture(self):
             try:
